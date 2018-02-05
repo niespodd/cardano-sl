@@ -33,17 +33,17 @@ import           Data.List.Extra (nubOrdOn)
 import           Formatting (build, sformat, (%))
 import           Serokell.Util (allDistinct)
 
-import           Pos.Binary.Class (AsBinary (..), Bi)
+import           Pos.Binary.Class (AsBinary (..), BiEnc)
 import           Pos.Core.Common (StakeholderId, addressHash)
 import           Pos.Core.Slotting.Types (EpochIndex)
 import           Pos.Core.Ssc.Types (VssCertificate (..), VssCertificatesMap (..))
-import           Pos.Crypto (HasCryptoConfiguration, SecretKey, SignTag (SignVssCert),
-                             VssPublicKey, checkSig, sign, toPublic)
+import           Pos.Crypto (HasCryptoConfiguration, SecretKey, SignTag (SignVssCert), VssPublicKey,
+                             checkSig, sign, toPublic)
 
 -- | Make VssCertificate valid up to given epoch using 'SecretKey' to sign
 -- data.
 mkVssCertificate
-    :: (HasCryptoConfiguration, Bi EpochIndex)
+    :: (HasCryptoConfiguration, BiEnc EpochIndex)
     => SecretKey
     -> AsBinary VssPublicKey
     -> EpochIndex
@@ -56,7 +56,7 @@ mkVssCertificate sk vk expiry =
 -- | Recreate 'VssCertificate' from its contents. This function may
 -- 'fail' if data is invalid.
 checkVssCertificate
-    :: (HasCryptoConfiguration, Bi EpochIndex, MonadError Text m)
+    :: (HasCryptoConfiguration, BiEnc EpochIndex, MonadError Text m)
     => VssCertificate
     -> m ()
 checkVssCertificate it =
@@ -66,7 +66,7 @@ checkVssCertificate it =
 -- | Check that the VSS certificate is signed properly
 -- #checkPubKeyAddress
 -- #checkSig
-checkCertSign :: (HasCryptoConfiguration, Bi EpochIndex) => VssCertificate -> Bool
+checkCertSign :: (HasCryptoConfiguration, BiEnc EpochIndex) => VssCertificate -> Bool
 checkCertSign UnsafeVssCertificate {..} =
     checkSig SignVssCert vcSigningKey (vcVssKey, vcExpiryEpoch) vcSignature
 
@@ -86,7 +86,7 @@ mkVssCertificatesMap = UnsafeVssCertificatesMap . HM.fromList . map toCertPair
 -- 'vcVssKey's. Also checks every VssCertificate in the map (see
 -- 'checkVssCertificate').
 checkVssCertificatesMap
-    :: (HasCryptoConfiguration, Bi EpochIndex, MonadError Text m)
+    :: (HasCryptoConfiguration, BiEnc EpochIndex, MonadError Text m)
     => VssCertificatesMap
     -> m ()
 checkVssCertificatesMap vssCertsMap = do
