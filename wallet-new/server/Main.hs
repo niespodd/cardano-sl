@@ -31,8 +31,11 @@ import           System.Wlog (LoggerName, logInfo)
 import qualified Cardano.Wallet.API.V1.Swagger as Swagger
 import           Cardano.Wallet.Server.CLI (WalletBackendParams (..), WalletDBOptions (..),
                                             WalletStartupOptions (..), getWalletNodeOptions,
-                                            isDebugMode)
+                                            isDebugMode,
+                                            ChooseWalletBackend (..), NewWalletBackendParams (..))
 import qualified Cardano.Wallet.Server.Plugins as Plugins
+import qualified Cardano.Wallet.Kernel      as Kernel
+import qualified Cardano.Wallet.Kernel.Mode as Kernel.Mode
 import qualified Pos.Client.CLI as CLI
 
 
@@ -84,16 +87,44 @@ actionWithWallet sscParams nodeParams wArgs@WalletBackendParams {..} =
                       , Plugins.notifierPlugin
                       ]
 
+actionWithNewWallet :: (HasConfigurations, HasCompileInfo)
+                    => SscParams
+                    -> NodeParams
+                    -> NewWalletBackendParams
+                    -> Production ()
+actionWithNewWallet sscParams nodeParams NewWalletBackendParams {} =
+    bracketNodeResources
+        nodeParams
+        sscParams
+        txpGlobalSettings
+        initNodeDBs $ \nr ->
+      Kernel.bracketWalletResources $ \wallet ->
+        Kernel.Mode.runWalletMode nr wallet (mainAction nr)
+  where
+    mainAction = runNodeWithInit $ Kernel.init =<< Kernel.Mode.getWallet
+
+    runNodeWithInit init nr =
+        let (ActionSpec f, outs) = runNode nr plugins
+         in (ActionSpec $ \s -> init >> f s, outs)
+
+    plugins :: HasConfigurations => Plugins.Plugin Kernel.Mode.WalletMode
+    plugins = mconcat []
+
+
 -- | Runs an edge node plus its wallet backend API.
 startEdgeNode :: HasCompileInfo
               => WalletStartupOptions
               -> Production ()
 startEdgeNode WalletStartupOptions{..} = do
   withConfigurations conf $ do
-      when (isDebugMode $ walletRunMode wsoWalletBackendParams) $
-          generateSwaggerDocumentation
       (sscParams, nodeParams) <- getParameters
-      actionWithWallet sscParams nodeParams wsoWalletBackendParams
+      case wsoWalletBackendParams of
+        WalletLegacy legacyParams -> do
+          when (isDebugMode $ walletRunMode legacyParams) $
+              generateSwaggerDocumentation
+          actionWithWallet sscParams nodeParams legacyParams
+        WalletNew newParams ->
+          actionWithNewWallet sscParams nodeParams newParams
   where
     getParameters :: HasConfigurations => Production (SscParams, NodeParams)
     getParameters = do

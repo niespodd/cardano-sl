@@ -9,7 +9,7 @@ import           Data.Time.Units (Minute)
 import           Data.Version (showVersion)
 import           Options.Applicative (Parser, auto, execParser, footerDoc, fullDesc, header, help,
                                       helper, info, infoOption, long, metavar, option, progDesc,
-                                      strOption, switch, value)
+                                      strOption, switch, value, flag')
 import           Paths_cardano_sl (version)
 import           Pos.Client.CLI (CommonNodeArgs (..))
 import qualified Pos.Client.CLI as CLI
@@ -23,8 +23,13 @@ import           Pos.Web (TlsParams (..))
 -- plus the wallet backend specific options.
 data WalletStartupOptions = WalletStartupOptions {
       wsoNodeArgs            :: !CommonNodeArgs
-    , wsoWalletBackendParams :: !WalletBackendParams
+    , wsoWalletBackendParams :: !ChooseWalletBackend
     }
+
+-- | TODO: Once we get rid of the legacy wallet, remove this.
+data ChooseWalletBackend =
+    WalletLegacy !WalletBackendParams
+  | WalletNew    !NewWalletBackendParams
 
 -- | DB-specific options.
 data WalletDBOptions = WalletDBOptions {
@@ -36,7 +41,7 @@ data WalletDBOptions = WalletDBOptions {
     , walletFlushDb      :: !Bool
     } deriving Show
 
--- | The startup parameters for the wallet backend.
+-- | The startup parameters for the legacy wallet backend.
 -- Named with the suffix `Params` to honour other types of
 -- parameters like `NodeParams` or `SscParams`.
 data WalletBackendParams = WalletBackendParams
@@ -53,6 +58,13 @@ data WalletBackendParams = WalletBackendParams
     , walletDbOptions     :: !WalletDBOptions
     -- ^ DB-specific options.
     } deriving Show
+
+-- | Start up parameters for the new wallet backend
+--
+-- TODO: This is just a placeholder at the moment. Once we get rid of the legacy
+-- implementation this can be renamed.
+data NewWalletBackendParams = NewWalletBackendParams
+    deriving (Show)
 
 -- | A richer type to specify in which mode we are running this node.
 data RunMode = ProductionMode
@@ -83,7 +95,21 @@ getWalletNodeOptions = execParser programInfo
 -- | The main @Parser@ for the @WalletStartupOptions@
 walletStartupOptionsParser :: Parser WalletStartupOptions
 walletStartupOptionsParser = WalletStartupOptions <$> CLI.commonNodeArgsParser
-                                                  <*> walletBackendParamsParser
+                                                  <*> chooseWalletBackendParser
+
+chooseWalletBackendParser :: Parser ChooseWalletBackend
+chooseWalletBackendParser = asum [
+      WalletNew    <$> newWalletBackendParamsParser
+    , WalletLegacy <$> walletBackendParamsParser
+    ]
+
+-- | 'Parser' for the new wallet backend options
+newWalletBackendParamsParser :: Parser NewWalletBackendParams
+newWalletBackendParamsParser =
+    flag' NewWalletBackendParams $ mconcat [
+        long "new-wallet"
+      , help "Use the new wallet implementation (NOT FOR PRODUCTION USE)"
+      ]
 
 -- | The @Parser@ for the @WalletBackendParams@.
 walletBackendParamsParser :: Parser WalletBackendParams
